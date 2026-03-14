@@ -673,14 +673,11 @@ export const playCard = mutation({
 
     const topCard = game.discardPile[game.discardPile.length - 1];
 
-    if (!canPlayCard(cardId, topCard, game.currentColor)) {
-      throw new Error("Cannot play that card");
-    }
-
-    // ── Penalty stack enforcement ─────────────────────────────────────────────
-    // When a draw stack is active the player may only respond with a matching
-    // penalty card. Plain wilds and regular cards are blocked — you must stack
-    // or draw.
+    // ── Penalty stack enforcement FIRST ──────────────────────────────────────
+    // When a draw stack is active the ONLY legal plays are a matching penalty
+    // card (draw2 on draw2, wild_draw4 on wild_draw4). Everything else —
+    // including same-color cards and plain wilds — is blocked. This check runs
+    // before canPlayCard so that color/value matching cannot override it.
     if (game.drawStack > 0) {
       const parsedCard = parseCard(cardId);
       const topParsed = parseCard(topCard);
@@ -691,14 +688,15 @@ export const playCard = mutation({
       if (topCard === "wild_draw4" && cardId !== "wild_draw4") {
         throw new Error("You must play a +4 or draw!");
       }
-      // Block plain wild — cannot use it to escape a draw stack
-      if (parsedCard.value === "wild") {
-        throw new Error(
-          "You cannot change color while a draw stack is active!",
-        );
-      }
     }
     // ─────────────────────────────────────────────────────────────────────────
+
+    // Normal play rules only apply when there is no active penalty stack
+    if (game.drawStack === 0) {
+      if (!canPlayCard(cardId, topCard, game.currentColor)) {
+        throw new Error("Cannot play that card");
+      }
+    }
 
     const cardIdx = player.hand.indexOf(cardId);
     if (cardIdx === -1) throw new Error("Card not in hand");
