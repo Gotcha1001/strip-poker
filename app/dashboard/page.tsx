@@ -7,138 +7,85 @@ import { api } from "@/convex/_generated/api";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import {
-  Users,
-  Gamepad2,
-  Trophy,
-  Clock,
-  Swords,
-  TrendingUp,
-} from "lucide-react";
-import { Id } from "@/convex/_generated/dataModel";
-
-interface Game {
-  _id: Id<"games">;
-  playerOrder: string[];
-  winnerId?: string;
-  createdAt: number;
-  discardPile: string[];
-  status: "active" | "finished";
-}
-
-function estimateDurationSeconds(game: Game): number {
-  return Math.max(1, Math.floor(game.discardPile.length * 1.8));
-}
-
-function formatAvgDuration(seconds: number): string {
-  if (seconds < 60) return `${seconds}s`;
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return s > 0 ? `${m}m ${s}s` : `${m}m`;
-}
+import { Users, Gamepad2, Trophy, Clock, Swords, TrendingUp } from "lucide-react";
 
 export default function DashboardPage() {
   const user = useUserContext();
   const { user: clerkUser } = useUser();
-
   const games = useQuery(
     api.game.getFinishedGamesForUser,
-    clerkUser ? { userId: clerkUser.id } : "skip",
+    clerkUser ? { userId: clerkUser.id } : "skip"
   );
-
   const allGames = useQuery(api.game.getFinishedGames);
 
-  // ── Compute personal stats ──────────────────────────────────────────────────
   const totalGames = games?.length ?? 0;
-  const wins = games?.filter((g) => g.winnerId === clerkUser?.id).length ?? 0;
+  const wins = games?.filter((g) => (g.winnerIds ?? [g.winnerId]).includes(clerkUser?.id ?? "")).length ?? 0;
   const losses = totalGames - wins;
   const winRate = totalGames > 0 ? Math.round((wins / totalGames) * 100) : 0;
 
-  const avgDuration =
-    games && games.length > 0
-      ? formatAvgDuration(
-          Math.round(
-            games.reduce((sum, g) => sum + estimateDurationSeconds(g), 0) /
-              games.length,
-          ),
-        )
-      : "—";
+  const activePlayers = allGames
+    ? new Set(allGames.flatMap((g) => g.playerOrder.filter((id) => !id.startsWith("bot_")))).size
+    : null;
 
-  // ── Current win/loss streak ─────────────────────────────────────────────────
   const streak = (() => {
     if (!games || !clerkUser) return null;
     const sorted = [...games].sort((a, b) => b.createdAt - a.createdAt);
     if (sorted.length === 0) return null;
-    const lastWon = sorted[0].winnerId === clerkUser.id;
+    const lastWon = (sorted[0].winnerIds ?? [sorted[0].winnerId]).includes(clerkUser.id);
     let count = 0;
     for (const g of sorted) {
-      if ((g.winnerId === clerkUser.id) === lastWon) count++;
+      if (((g.winnerIds ?? [g.winnerId]).includes(clerkUser.id)) === lastWon) count++;
       else break;
     }
     return { won: lastWon, count };
   })();
 
-  // ── Active players (unique users across last 50 finished games) ─────────────
-  const activePlayers = allGames
-    ? new Set(
-        allGames.flatMap((g) =>
-          g.playerOrder.filter((id) => !id.startsWith("bot_")),
-        ),
-      ).size
-    : null;
-
-  // ── Loading state ───────────────────────────────────────────────────────────
   const isLoading = games === undefined;
 
   const STAT_CARDS = [
     {
       label: "Games Played",
-      value: isLoading ? "…" : totalGames || "—",
+      value: isLoading ? "..." : totalGames || "---",
       icon: Gamepad2,
-      color: "text-purple-600 dark:text-purple-400",
+      color: "text-emerald-600 dark:text-emerald-400",
       sub: totalGames > 0 ? `${wins}W / ${losses}L` : null,
     },
     {
       label: "Wins",
-      value: isLoading ? "…" : wins || "—",
+      value: isLoading ? "..." : wins || "---",
       icon: Trophy,
       color: "text-yellow-600 dark:text-yellow-400",
       sub: totalGames > 0 ? `${winRate}% win rate` : null,
     },
     {
       label: "Players Online",
-      value: activePlayers ?? "…",
+      value: activePlayers ?? "...",
       icon: Users,
-      color: "text-green-600 dark:text-green-400",
-      sub: "in last 50 games",
+      color: "text-teal-600 dark:text-teal-400",
+      sub: "in last 100 games",
     },
     {
-      label: "Avg. Game Time",
-      value: isLoading ? "…" : avgDuration,
+      label: "Total Hands",
+      value: isLoading ? "..." : totalGames || "---",
       icon: Clock,
       color: "text-blue-600 dark:text-blue-400",
-      sub: totalGames > 0 ? `over ${totalGames} games` : null,
+      sub: totalGames > 0 ? `over ${totalGames} sessions` : null,
     },
   ];
 
   return (
     <div className="max-w-5xl mx-auto">
       {/* Welcome header */}
-      <motion.div
-        className="mb-8"
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-      >
+      <motion.div className="mb-8" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
         <h1 className="text-3xl font-bold text-black dark:text-white">
           Welcome back{user?.name ? `, ${user.name}` : ""}! 👋
         </h1>
-        <p className="text-gray-500 dark:text-purple-300 mt-1">
+        <p className="text-gray-500 dark:text-emerald-300 mt-1">
           Ready to play? Jump into the lobby or check your stats.
         </p>
       </motion.div>
 
-      {/* Streak banner — only show when there's a streak of 2+ */}
+      {/* Streak banner */}
       {streak && streak.count >= 2 && (
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
@@ -152,8 +99,8 @@ export default function DashboardPage() {
           <span className="text-2xl">{streak.won ? "🔥" : "❄️"}</span>
           <p className="text-sm font-semibold text-black dark:text-white">
             {streak.won
-              ? `You're on a ${streak.count}-game win streak! Keep it up.`
-              : `${streak.count}-game loss streak — time for a comeback!`}
+              ? `You're on a ${streak.count}-hand winning streak! Keep it up.`
+              : `${streak.count}-hand losing streak — time for a comeback!`}
           </p>
         </motion.div>
       )}
@@ -163,90 +110,70 @@ export default function DashboardPage() {
         className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8"
         initial="hidden"
         animate="visible"
-        variants={{
-          hidden: {},
-          visible: { transition: { staggerChildren: 0.1 } },
-        }}
+        variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.1 } } }}
       >
         {STAT_CARDS.map(({ label, value, icon: Icon, color, sub }) => (
           <motion.div
             key={label}
-            className="p-5 rounded-2xl border border-gray-200 dark:border-purple-800 bg-white dark:bg-purple-950/40 shadow-sm"
-            variants={{
-              hidden: { opacity: 0, y: 20 },
-              visible: { opacity: 1, y: 0 },
-            }}
+            className="p-5 rounded-2xl border border-gray-200 dark:border-emerald-800 bg-white dark:bg-emerald-950/40 shadow-sm"
+            variants={{ hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0 } }}
           >
             <Icon className={`h-6 w-6 mb-2 ${color}`} />
-            <div className="text-2xl font-bold text-black dark:text-white">
-              {value}
-            </div>
-            <div className="text-sm text-gray-500 dark:text-purple-300">
-              {label}
-            </div>
-            {sub && (
-              <div className="text-xs text-gray-400 dark:text-purple-500 mt-0.5">
-                {sub}
-              </div>
-            )}
+            <div className="text-2xl font-bold text-black dark:text-white">{value}</div>
+            <div className="text-sm text-gray-500 dark:text-emerald-300">{label}</div>
+            {sub && <div className="text-xs text-gray-400 dark:text-emerald-500 mt-0.5">{sub}</div>}
           </motion.div>
         ))}
       </motion.div>
 
-      {/* Win rate bar — only show when there's data */}
+      {/* Win rate bar */}
       {totalGames > 0 && (
         <motion.div
-          className="p-5 rounded-2xl border border-gray-200 dark:border-purple-800 bg-white dark:bg-purple-950/40 shadow-sm mb-6"
+          className="p-5 rounded-2xl border border-gray-200 dark:border-emerald-800 bg-white dark:bg-emerald-950/40 shadow-sm mb-6"
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.25 }}
         >
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
-              <TrendingUp className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-              <span className="text-sm font-semibold text-black dark:text-white">
-                Win Rate
-              </span>
+              <TrendingUp className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+              <span className="text-sm font-semibold text-black dark:text-white">Win Rate</span>
             </div>
-            <span className="text-sm font-bold text-purple-600 dark:text-purple-400">
-              {winRate}%
-            </span>
+            <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400">{winRate}%</span>
           </div>
-          <div className="h-2.5 w-full rounded-full bg-gray-100 dark:bg-purple-900/50 overflow-hidden">
+          <div className="h-2.5 w-full rounded-full bg-gray-100 dark:bg-emerald-900/50 overflow-hidden">
             <motion.div
-              className="h-full rounded-full bg-gradient-to-r from-purple-500 to-purple-400"
+              className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-teal-400"
               initial={{ width: 0 }}
               animate={{ width: `${winRate}%` }}
               transition={{ duration: 0.8, delay: 0.4, ease: "easeOut" }}
             />
           </div>
-          <div className="flex justify-between mt-1.5 text-xs text-gray-400 dark:text-purple-500">
+          <div className="flex justify-between mt-1.5 text-xs text-gray-400 dark:text-emerald-500">
             <span>{wins} wins</span>
             <span>{losses} losses</span>
           </div>
         </motion.div>
       )}
 
-      {/* Recent form — last 5 games as W/L dots */}
+      {/* Recent form */}
       {games && games.length > 0 && (
         <motion.div
-          className="p-5 rounded-2xl border border-gray-200 dark:border-purple-800 bg-white dark:bg-purple-950/40 shadow-sm mb-6"
+          className="p-5 rounded-2xl border border-gray-200 dark:border-emerald-800 bg-white dark:bg-emerald-950/40 shadow-sm mb-6"
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3 }}
         >
           <div className="flex items-center gap-2 mb-3">
-            <Swords className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-            <span className="text-sm font-semibold text-black dark:text-white">
-              Recent Form
-            </span>
+            <Swords className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+            <span className="text-sm font-semibold text-black dark:text-white">Recent Form</span>
           </div>
           <div className="flex items-center gap-2">
             {[...games]
               .sort((a, b) => b.createdAt - a.createdAt)
               .slice(0, 10)
               .map((g, i) => {
-                const won = g.winnerId === clerkUser?.id;
+                const won = (g.winnerIds ?? [g.winnerId]).includes(clerkUser?.id ?? "");
                 return (
                   <motion.div
                     key={g._id}
@@ -265,9 +192,7 @@ export default function DashboardPage() {
                 );
               })}
             {games.length > 10 && (
-              <span className="text-xs text-gray-400 dark:text-purple-500 ml-1">
-                +{games.length - 10} more
-              </span>
+              <span className="text-xs text-gray-400 dark:text-emerald-500 ml-1">+{games.length - 10} more</span>
             )}
           </div>
         </motion.div>
@@ -275,33 +200,30 @@ export default function DashboardPage() {
 
       {/* Quick actions */}
       <motion.div
-        className="p-6 rounded-2xl border border-gray-200 dark:border-purple-800 bg-white dark:bg-purple-950/40 shadow-sm"
+        className="p-6 rounded-2xl border border-gray-200 dark:border-emerald-800 bg-white dark:bg-emerald-950/40 shadow-sm"
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.35 }}
       >
-        <h2 className="text-lg font-semibold text-black dark:text-white mb-4">
-          Quick Actions
-        </h2>
+        <h2 className="text-lg font-semibold text-black dark:text-white mb-4">Quick Actions</h2>
         <div className="flex flex-wrap gap-3">
           <Link href="/lobby">
-            <Button className="bg-purple-600 hover:bg-purple-500 text-white">
+            <Button className="bg-emerald-600 hover:bg-emerald-500 text-white">
               <Users className="h-4 w-4 mr-2" /> Browse Lobby
             </Button>
           </Link>
-          <Link href="/lobby">
-            <Button
-              variant="outline"
-              className="border-purple-500 text-purple-600 dark:text-purple-400"
-            >
-              <Gamepad2 className="h-4 w-4 mr-2" /> Create Room
+          <Link href="/play">
+            <Button variant="outline" className="border-emerald-500 text-emerald-600 dark:text-emerald-400">
+              <Gamepad2 className="h-4 w-4 mr-2" /> Play vs Bot
+            </Button>
+          </Link>
+          <Link href="/local">
+            <Button variant="outline" className="border-emerald-500 text-emerald-600 dark:text-emerald-400">
+              🏠 Play Locally
             </Button>
           </Link>
           <Link href="/history">
-            <Button
-              variant="outline"
-              className="border-purple-500 text-purple-600 dark:text-purple-400"
-            >
+            <Button variant="outline" className="border-emerald-500 text-emerald-600 dark:text-emerald-400">
               <Trophy className="h-4 w-4 mr-2" /> View History
             </Button>
           </Link>

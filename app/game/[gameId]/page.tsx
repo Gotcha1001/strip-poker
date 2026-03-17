@@ -1,72 +1,52 @@
 "use client";
 
-import { useParams, useRouter } from "next/navigation";
+import { use } from "react";
 import { useUser } from "@clerk/nextjs";
-import { useQuery, useMutation } from "convex/react";
+import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
+import { useRouter } from "next/navigation";
+import { motion } from "framer-motion";
 import { WaitingRoom } from "@/app/components/WaitingRoom";
 import { GameBoard } from "@/app/components/Gameboard";
-import { WinScreen } from "@/app/components/Winscreen";
 
-export default function GamePage() {
-  const { gameId } = useParams();
+
+interface Props {
+  params: Promise<{ roomId: string }>;
+}
+
+export default function GamePage({ params }: Props) {
+  const { roomId } = use(params);
   const { user, isLoaded } = useUser();
   const router = useRouter();
 
-  // Cast the URL param to a Convex Id
-  const roomId = gameId as Id<"rooms">;
+  const room = useQuery(api.rooms.getRoom, { roomId: roomId as Id<"rooms"> });
+  const players = useQuery(api.rooms.getRoomPlayers, { roomId: roomId as Id<"rooms"> });
+  const game = useQuery(api.game.getGame, { roomId: roomId as Id<"rooms"> });
 
-  const room = useQuery(api.rooms.getRoom, { roomId });
-  const players = useQuery(api.rooms.getRoomPlayers, { roomId });
-  const game = useQuery(api.game.getGame, { roomId });
-
-  if (!isLoaded || room === undefined) {
-    return <div>Loading...</div>;
-  }
-
-  // Room not found
-  if (room === null) {
-    router.push("/lobby");
-    return null;
-  }
-
-  // Redirect unauthenticated users
-  if (!user) {
-    router.push("/");
-    return null;
-  }
-
-  // Game finished — show win screen
-  if (game?.status === "finished" && game.winnerId) {
-    const winner = players?.find((p) => p.userId === game.winnerId);
+  if (!isLoaded || room === undefined || players === undefined) {
     return (
-      <WinScreen
-        winnerName={winner?.name ?? "Unknown"}
-        isWinner={game.winnerId === user.id}
-        roomId={roomId}
-      />
+      <div className="min-h-screen flex flex-col items-center justify-center gap-6">
+        <motion.div className="flex gap-3" animate={{ opacity: [0.4, 1, 0.4] }} transition={{ duration: 1.4, repeat: Infinity }}>
+          {["♠", "♥", "♦", "♣"].map((s, i) => (
+            <motion.span key={i} className="text-4xl text-white"
+              animate={{ y: [0, -12, 0] }}
+              transition={{ duration: 0.8, delay: i * 0.15, repeat: Infinity }}>
+              {s}
+            </motion.span>
+          ))}
+        </motion.div>
+        <p className="text-gray-500 dark:text-emerald-300 text-lg font-medium">Loading table...</p>
+      </div>
     );
   }
 
-  // Game active — show board
-  if (room.status === "playing" && game && players) {
-    return (
-      <GameBoard
-        room={room}
-        game={game}
-        players={players}
-        currentUserId={user.id}
-      />
-    );
+  if (!user) { router.push("/"); return null; }
+  if (!room) { router.push("/lobby"); return null; }
+
+  if (room.status === "playing" && game) {
+    return <GameBoard room={room} game={game} players={players} currentUserId={user.id} />;
   }
 
-  // Room waiting — show waiting room
-  if (players) {
-    return (
-      <WaitingRoom room={room} players={players} currentUserId={user.id} />
-    );
-  }
-
-  return <div>Loading room...</div>;
+  return <WaitingRoom room={room} players={players} currentUserId={user.id} />;
 }

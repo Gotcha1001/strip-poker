@@ -2,7 +2,7 @@
 const authConfig = {
   providers: [
     {
-      domain: "https://quiet-husky-70.clerk.accounts.dev",
+      domain: "https://noble-goldfish-47.clerk.accounts.dev",
       applicationID: "convex", // ← must be "convex", not a dynamic env var
     },
   ],

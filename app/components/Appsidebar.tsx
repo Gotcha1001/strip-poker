@@ -10,6 +10,7 @@ import {
   Gamepad2,
   Settings,
   MonitorSpeaker,
+  BookOpen,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -34,9 +35,10 @@ const NAV_ITEMS = [
   { label: "Dashboard", path: "/dashboard", icon: Home },
   { label: "Lobby", path: "/lobby", icon: Users },
   { label: "Play vs Bot", path: "/play", icon: Gamepad2 },
-  { label: "Play Locally", path: "/local", icon: MonitorSpeaker, badge: "🏠" }, // ← NEW
+  { label: "Play Locally", path: "/local", icon: MonitorSpeaker, badge: "🏠" },
   { label: "Game History", path: "/history", icon: History },
   { label: "Leaderboard", path: "/leaderboard", icon: Trophy, badge: "🔥" },
+  { label: "Tips & Rules", path: "/tips", icon: BookOpen, badge: "✨" },
   { label: "Settings", path: "/settings", icon: Settings },
 ];
 
@@ -51,33 +53,33 @@ export function AppSidebar() {
   };
 
   return (
-    <Sidebar className="relative w-64 bg-white dark:bg-indigo-950">
+    <Sidebar className="relative w-64 bg-white dark:bg-emerald-950">
       {/* Animated dark background (dark mode only) */}
       <div className="hidden dark:block absolute inset-0 z-0 overflow-hidden">
         <motion.div
-          className="absolute top-[-200px] left-[-200px] w-[600px] h-[600px] rounded-full bg-purple-900 opacity-60"
+          className="absolute top-[-200px] left-[-200px] w-[600px] h-[600px] rounded-full bg-emerald-900 opacity-60"
           animate={{ scale: [1, 1.3, 1], x: [0, 50, 0], y: [0, -50, 0] }}
           transition={{ duration: 20, repeat: Infinity, repeatType: "mirror" }}
         />
         <motion.div
-          className="absolute bottom-[-250px] right-[-250px] w-[700px] h-[700px] rounded-full bg-indigo-950 opacity-50"
+          className="absolute bottom-[-250px] right-[-250px] w-[700px] h-[700px] rounded-full bg-teal-950 opacity-50"
           animate={{ scale: [1, 1.25, 1], x: [0, -50, 0], y: [0, 50, 0] }}
           transition={{ duration: 25, repeat: Infinity, repeatType: "mirror" }}
         />
       </div>
 
       {/* Header */}
-      <SidebarHeader className="border-b border-gray-200 dark:border-purple-800 p-4 relative z-10">
+      <SidebarHeader className="border-b border-gray-200 dark:border-emerald-800 p-4 relative z-10">
         <Link href="/" className="flex items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-purple-600 dark:bg-purple-700 shadow-lg">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-600 dark:bg-emerald-700 shadow-lg">
             <Play className="h-5 w-5 text-white" />
           </div>
           <div className="flex flex-col">
             <span className="text-base font-bold leading-none tracking-tight text-black dark:text-white">
-              UNO Arena
+              Poker Arena
             </span>
-            <span className="text-[10px] text-gray-500 dark:text-purple-300 uppercase tracking-widest">
-              Multiplayer Card Game
+            <span className="text-[10px] text-gray-500 dark:text-emerald-300 uppercase tracking-widest">
+              Texas Hold&apos;em
             </span>
           </div>
         </Link>
@@ -86,7 +88,7 @@ export function AppSidebar() {
       {/* Navigation */}
       <SidebarContent className="relative z-10">
         <SidebarGroup>
-          <SidebarGroupLabel className="text-gray-500 dark:text-purple-300">
+          <SidebarGroupLabel className="text-gray-500 dark:text-emerald-300">
             Navigation
           </SidebarGroupLabel>
           <SidebarGroupContent>
@@ -96,7 +98,7 @@ export function AppSidebar() {
                   <SidebarMenuButton
                     onClick={() => handleNav(path)}
                     isActive={pathname === path}
-                    className="cursor-pointer text-gray-700 dark:text-purple-200 hover:text-purple-600 dark:hover:text-purple-300 rounded-md"
+                    className="cursor-pointer text-gray-700 dark:text-emerald-200 hover:text-emerald-600 dark:hover:text-emerald-300 rounded-md"
                   >
                     <Icon className="h-4 w-4" />
                     <span className="flex-1">{label}</span>
@@ -117,9 +119,9 @@ export function AppSidebar() {
       </SidebarContent>
 
       {/* Footer */}
-      <SidebarFooter className="border-t border-gray-200 dark:border-purple-800 p-4 relative z-10">
+      <SidebarFooter className="border-t border-gray-200 dark:border-emerald-800 p-4 relative z-10">
         <div className="flex items-center justify-between">
-          <span className="text-sm font-medium text-gray-700 dark:text-purple-200">
+          <span className="text-sm font-medium text-gray-700 dark:text-emerald-200">
             My Account
           </span>
           <UserButton />

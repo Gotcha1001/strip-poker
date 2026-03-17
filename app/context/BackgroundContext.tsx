@@ -1,16 +1,16 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useState } from "react";
 
 export interface BackgroundOption {
   id: string;
   label: string;
-  thumbnail: string; // path in /public
-  src: string; // path in /public
-  overlay?: string; // optional CSS color overlay e.g. "rgba(0,0,0,0.45)"
+  thumbnail: string; // path in /public — empty = CSS fallback
+  src: string; // path in /public — empty = CSS fallback
+  overlay?: string;
 }
 
-// ── Add your images to /public/backgrounds/ and list them here ──────────────
+// ── Register your images from /public/backgrounds/ here ─────────────────────
 export const BACKGROUNDS: BackgroundOption[] = [
   {
     id: "felt",
@@ -56,7 +56,7 @@ export const BACKGROUNDS: BackgroundOption[] = [
   },
 ];
 
-const STORAGE_KEY = "uno-board-bg";
+const STORAGE_KEY = "poker-board-bg";
 const DEFAULT_ID = "felt";
 
 interface BackgroundContextValue {
@@ -75,7 +75,6 @@ export function BackgroundProvider({
   children: React.ReactNode;
 }) {
   const [selectedId, setSelectedId] = useState<string>(() => {
-    // Only runs on the client, once, at mount time
     if (typeof window === "undefined") return DEFAULT_ID;
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved && BACKGROUNDS.find((b) => b.id === saved)) return saved;
