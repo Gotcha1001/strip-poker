@@ -10,7 +10,6 @@ import { motion } from "framer-motion";
 import { WaitingRoom } from "@/app/components/WaitingRoom";
 import { GameBoard } from "@/app/components/Gameboard";
 
-
 interface Props {
   params: Promise<{ roomId: string }>;
 }
@@ -20,9 +19,16 @@ export default function GamePage({ params }: Props) {
   const { user, isLoaded } = useUser();
   const router = useRouter();
 
-  const room = useQuery(api.rooms.getRoom, { roomId: roomId as Id<"rooms"> });
-  const players = useQuery(api.rooms.getRoomPlayers, { roomId: roomId as Id<"rooms"> });
-  const game = useQuery(api.game.getGame, { roomId: roomId as Id<"rooms"> });
+  // Guard: pass "skip" until the dynamic segment has actually resolved.
+  // Without this, the first render fires with roomId = "" which causes:
+  // ArgumentValidationError: Object is missing the required field `roomId`
+  const queryArg = roomId
+    ? { roomId: roomId as Id<"rooms"> }
+    : "skip" as const;
+
+  const room    = useQuery(api.rooms.getRoom,        queryArg);
+  const players = useQuery(api.rooms.getRoomPlayers, queryArg);
+  const game    = useQuery(api.game.getGame,         queryArg);
 
   if (!isLoaded || room === undefined || players === undefined) {
     return (
