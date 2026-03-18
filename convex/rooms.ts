@@ -2,30 +2,19 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 
 export const listOpenRooms = query({
-  handler: async (ctx) => {
-    return await ctx.db
-      .query("rooms")
-      .withIndex("by_status", (q) => q.eq("status", "waiting"))
-      .order("desc")
-      .take(20);
-  },
+  handler: async (ctx) =>
+    ctx.db.query("rooms").withIndex("by_status", q => q.eq("status", "waiting")).order("desc").take(20),
 });
 
 export const getRoom = query({
   args: { roomId: v.id("rooms") },
-  handler: async (ctx, { roomId }) => {
-    return await ctx.db.get(roomId);
-  },
+  handler: async (ctx, { roomId }) => ctx.db.get(roomId),
 });
 
 export const getRoomPlayers = query({
   args: { roomId: v.id("rooms") },
-  handler: async (ctx, { roomId }) => {
-    return await ctx.db
-      .query("players")
-      .withIndex("by_room", (q) => q.eq("roomId", roomId))
-      .collect();
-  },
+  handler: async (ctx, { roomId }) =>
+    ctx.db.query("players").withIndex("by_room", q => q.eq("roomId", roomId)).collect(),
 });
 
 export const createRoom = mutation({
@@ -35,12 +24,11 @@ export const createRoom = mutation({
     hostName: v.string(),
     avatarUrl: v.optional(v.string()),
     maxPlayers: v.number(),
-    bigBlind: v.optional(v.number()),
-    startingChips: v.optional(v.number()),
+    startingLives: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const bb = args.bigBlind ?? 20;
-    const startChips = args.startingChips ?? 1000;
+    const lives = args.startingLives ?? 5; // 🔥 default 5 clothing pieces
+
     const roomId = await ctx.db.insert("rooms", {
       name: args.name,
       hostId: args.hostId,
@@ -48,10 +36,10 @@ export const createRoom = mutation({
       status: "waiting",
       maxPlayers: args.maxPlayers,
       playerIds: [args.hostId],
-      bigBlind: bb,
-      startingChips: startChips,
+      startingLives: lives,
       createdAt: Date.now(),
     });
+
     await ctx.db.insert("players", {
       roomId,
       userId: args.hostId,
@@ -60,9 +48,10 @@ export const createRoom = mutation({
       isBot: false,
       isReady: false,
       isConnected: true,
-      chips: startChips,
+      lives,
       seatIndex: 0,
     });
+
     return roomId;
   },
 });
@@ -81,14 +70,9 @@ export const joinRoom = mutation({
     if (room.playerIds.length >= room.maxPlayers) throw new Error("Room is full");
     if (room.playerIds.includes(args.userId)) return args.roomId;
 
-    const players = await ctx.db
-      .query("players")
-      .withIndex("by_room", (q) => q.eq("roomId", args.roomId))
-      .collect();
+    const players = await ctx.db.query("players").withIndex("by_room", q => q.eq("roomId", args.roomId)).collect();
 
-    await ctx.db.patch(args.roomId, {
-      playerIds: [...room.playerIds, args.userId],
-    });
+    await ctx.db.patch(args.roomId, { playerIds: [...room.playerIds, args.userId] });
     await ctx.db.insert("players", {
       roomId: args.roomId,
       userId: args.userId,
@@ -97,9 +81,10 @@ export const joinRoom = mutation({
       isBot: false,
       isReady: false,
       isConnected: true,
-      chips: room.startingChips,
+      lives: room.startingLives,
       seatIndex: players.length,
     });
+
     return args.roomId;
   },
 });
@@ -112,18 +97,13 @@ export const addBot = mutation({
     if (room.hostId !== args.requesterId) throw new Error("Only host can add bots");
     if (room.playerIds.length >= room.maxPlayers) throw new Error("Room is full");
 
-    const players = await ctx.db
-      .query("players")
-      .withIndex("by_room", (q) => q.eq("roomId", args.roomId))
-      .collect();
-    const botCount = players.filter((p) => p.isBot).length;
+    const players  = await ctx.db.query("players").withIndex("by_room", q => q.eq("roomId", args.roomId)).collect();
+    const botCount = players.filter(p => p.isBot).length;
     const botNames = ["Bot Ace", "Bot River", "Bot Bluff", "Bot Royal"];
-    const botId = `bot_${Date.now()}`;
-    const botName = botNames[botCount] ?? `Bot ${botCount + 1}`;
+    const botId    = `bot_${Date.now()}`;
+    const botName  = botNames[botCount] ?? `Bot ${botCount + 1}`;
 
-    await ctx.db.patch(args.roomId, {
-      playerIds: [...room.playerIds, botId],
-    });
+    await ctx.db.patch(args.roomId, { playerIds: [...room.playerIds, botId] });
     await ctx.db.insert("players", {
       roomId: args.roomId,
       userId: botId,
@@ -131,7 +111,7 @@ export const addBot = mutation({
       isBot: true,
       isReady: true,
       isConnected: true,
-      chips: room.startingChips,
+      lives: room.startingLives,
       seatIndex: players.length,
     });
   },
@@ -142,71 +122,32 @@ export const leaveRoom = mutation({
   handler: async (ctx, args) => {
     const room = await ctx.db.get(args.roomId);
     if (!room) return;
-    const player = await ctx.db
-      .query("players")
-      .withIndex("by_user_room", (q) =>
-        q.eq("userId", args.userId).eq("roomId", args.roomId)
-      )
-      .first();
+    const player = await ctx.db.query("players").withIndex("by_user_room", q => q.eq("userId", args.userId).eq("roomId", args.roomId)).first();
     if (player) await ctx.db.delete(player._id);
-    const newIds = room.playerIds.filter((id) => id !== args.userId);
-    if (newIds.length === 0) {
-      await ctx.db.delete(args.roomId);
-    } else {
-      const newHostId = newIds[0];
-      const hostPlayer = await ctx.db
-        .query("players")
-        .withIndex("by_user_room", (q) =>
-          q.eq("userId", newHostId).eq("roomId", args.roomId)
-        )
-        .first();
-      await ctx.db.patch(args.roomId, {
-        playerIds: newIds,
-        hostId: newHostId,
-        hostName: hostPlayer?.name ?? "Unknown",
-      });
-    }
+    const newIds = room.playerIds.filter(id => id !== args.userId);
+    if (newIds.length === 0) { await ctx.db.delete(args.roomId); return; }
+    const hostPlayer = await ctx.db.query("players").withIndex("by_user_room", q => q.eq("userId", newIds[0]).eq("roomId", args.roomId)).first();
+    await ctx.db.patch(args.roomId, { playerIds: newIds, hostId: newIds[0], hostName: hostPlayer?.name ?? "Unknown" });
   },
 });
 
 export const setReady = mutation({
   args: { roomId: v.id("rooms"), userId: v.string(), isReady: v.boolean() },
   handler: async (ctx, args) => {
-    const player = await ctx.db
-      .query("players")
-      .withIndex("by_user_room", (q) =>
-        q.eq("userId", args.userId).eq("roomId", args.roomId)
-      )
-      .first();
+    const player = await ctx.db.query("players").withIndex("by_user_room", q => q.eq("userId", args.userId).eq("roomId", args.roomId)).first();
     if (player) await ctx.db.patch(player._id, { isReady: args.isReady });
   },
 });
 
 export const sendMessage = mutation({
-  args: {
-    roomId: v.id("rooms"),
-    userId: v.string(),
-    userName: v.string(),
-    text: v.string(),
-  },
+  args: { roomId: v.id("rooms"), userId: v.string(), userName: v.string(), text: v.string() },
   handler: async (ctx, args) => {
-    await ctx.db.insert("messages", {
-      roomId: args.roomId,
-      userId: args.userId,
-      userName: args.userName,
-      text: args.text,
-      createdAt: Date.now(),
-    });
+    await ctx.db.insert("messages", { roomId: args.roomId, userId: args.userId, userName: args.userName, text: args.text, createdAt: Date.now() });
   },
 });
 
 export const getMessages = query({
   args: { roomId: v.id("rooms") },
-  handler: async (ctx, { roomId }) => {
-    return await ctx.db
-      .query("messages")
-      .withIndex("by_room", (q) => q.eq("roomId", roomId))
-      .order("asc")
-      .take(100);
-  },
+  handler: async (ctx, { roomId }) =>
+    ctx.db.query("messages").withIndex("by_room", q => q.eq("roomId", roomId)).order("asc").take(100),
 });

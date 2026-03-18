@@ -11,6 +11,27 @@ import { Button } from "@/components/ui/button";
 import { useEffect, useRef } from "react";
 import { useSoundManager } from "@/hooks/useSoundManager";
 
+// ─── Clothing config (must match game) ───────────────────────────────────────
+const CLOTHING_EMOJI = ["👟", "👟", "🧦", "🧦", "👖", "👔", "👙"];
+
+function LivesMini({ lives, max }: { lives: number; max: number }) {
+  const pieces = CLOTHING_EMOJI.slice(0, max);
+  return (
+    <span className="inline-flex gap-0.5">
+      {pieces.map((p, i) => (
+        <span
+          key={i}
+          style={{ opacity: i < lives ? 1 : 0.2, fontSize: "0.7rem" }}
+        >
+          {p}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
 interface Room {
   _id: Id<"rooms">;
   name: string;
@@ -19,8 +40,7 @@ interface Room {
   status: "waiting" | "playing" | "finished";
   maxPlayers: number;
   playerIds: string[];
-  bigBlind: number;
-  startingChips: number;
+  startingLives: number;
   createdAt: number;
 }
 
@@ -32,7 +52,7 @@ interface Player {
   isBot: boolean;
   isReady: boolean;
   isConnected: boolean;
-  chips: number;
+  lives: number;        // 🔥 replaces chips
   seatIndex: number;
 }
 
@@ -42,21 +62,22 @@ interface Props {
   currentUserId: string;
 }
 
-const SEAT_LABELS = ["⬛", "🟥", "🟦", "🟩"];
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export function WaitingRoom({ room, players, currentUserId }: Props) {
-  const router = useRouter();
+  const router    = useRouter();
   const startGame = useMutation(api.game.startGame);
-  const addBot = useMutation(api.rooms.addBot);
+  const addBot    = useMutation(api.rooms.addBot);
   const leaveRoom = useMutation(api.rooms.leaveRoom);
-  const setReady = useMutation(api.rooms.setReady);
-  const { play } = useSoundManager();
+  const setReady  = useMutation(api.rooms.setReady);
+  const { play }  = useSoundManager();
 
-  const isHost = room.hostId === currentUserId;
-  const myPlayer = players.find((p) => p.userId === currentUserId);
+  const isHost   = room.hostId === currentUserId;
+  const myPlayer = players.find(p => p.userId === currentUserId);
   const canStart = isHost && players.length >= 2;
 
   const prevPlayerCount = useRef(players.length);
+
   useEffect(() => {
     if (players.length > prevPlayerCount.current) play("roomJoin");
     prevPlayerCount.current = players.length;
@@ -103,9 +124,15 @@ export function WaitingRoom({ room, players, currentUserId }: Props) {
 
   return (
     <div className="max-w-md mx-auto py-8 px-4">
+
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-black dark:text-white">{room.name}</h1>
+        <div>
+          <h1 className="text-2xl font-bold text-black dark:text-white">{room.name}</h1>
+          <p className="text-sm text-gray-500 dark:text-emerald-400 mt-0.5">
+            🎰 5-Card Draw Strip Poker
+          </p>
+        </div>
         <Button variant="outline" size="sm" className="flex items-center gap-1" onClick={handleLeave}>
           <LogOut size={14} /> Leave
         </Button>
@@ -119,17 +146,28 @@ export function WaitingRoom({ room, players, currentUserId }: Props) {
       >
         <div className="grid grid-cols-2 gap-3 text-sm mb-3">
           <div className="text-center">
-            <div className="text-gray-500 dark:text-emerald-400 text-xs uppercase tracking-wider mb-1">Starting Chips</div>
-            <div className="font-bold text-black dark:text-white text-lg">{room.startingChips}</div>
+            <div className="text-gray-500 dark:text-emerald-400 text-xs uppercase tracking-wider mb-1">
+              Starting Pieces
+            </div>
+            <div className="font-bold text-black dark:text-white text-lg flex items-center justify-center gap-1">
+              {room.startingLives}
+              <span className="text-base">👕</span>
+            </div>
           </div>
           <div className="text-center">
-            <div className="text-gray-500 dark:text-emerald-400 text-xs uppercase tracking-wider mb-1">Big Blind</div>
-            <div className="font-bold text-black dark:text-white text-lg">{room.bigBlind}</div>
+            <div className="text-gray-500 dark:text-emerald-400 text-xs uppercase tracking-wider mb-1">
+              Max Players
+            </div>
+            <div className="font-bold text-black dark:text-white text-lg">
+              {room.maxPlayers}
+            </div>
           </div>
         </div>
+
         <p className="text-gray-500 dark:text-emerald-300 text-sm text-center mb-3">
           Waiting for players... ({players.length}/{room.maxPlayers})
         </p>
+
         <Button
           variant="outline"
           size="sm"
@@ -145,6 +183,7 @@ export function WaitingRoom({ room, players, currentUserId }: Props) {
         <h2 className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-emerald-300 mb-3">
           Players
         </h2>
+
         {players.map((player, i) => (
           <motion.div
             key={player._id}
@@ -153,8 +192,9 @@ export function WaitingRoom({ room, players, currentUserId }: Props) {
             transition={{ delay: i * 0.08 }}
             className="flex items-center gap-3 p-3 rounded-xl bg-gray-50 dark:bg-emerald-900/30"
           >
+            {/* Avatar */}
             <div
-              className="w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold"
+              className="w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold flex-shrink-0"
               style={{
                 background: player.isBot
                   ? "#4a4a6a"
@@ -163,24 +203,33 @@ export function WaitingRoom({ room, players, currentUserId }: Props) {
             >
               {player.isBot ? <Bot size={18} /> : <UserRound size={18} />}
             </div>
-            <div className="flex-1">
+
+            {/* Info */}
+            <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
-                <span className="font-medium text-sm text-black dark:text-white">
+                <span className="font-medium text-sm text-black dark:text-white truncate">
                   {player.name}
                 </span>
-                {player.userId === room.hostId && <Crown size={12} className="text-yellow-500" />}
+                {player.userId === room.hostId && (
+                  <Crown size={12} className="text-yellow-500 flex-shrink-0" />
+                )}
                 {player.isBot && (
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-gray-200 dark:bg-emerald-800 text-gray-600 dark:text-emerald-300">
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-gray-200 dark:bg-emerald-800 text-gray-600 dark:text-emerald-300 flex-shrink-0">
                     BOT
                   </span>
                 )}
               </div>
-              <div className="text-xs text-gray-500 dark:text-emerald-400">
-                Seat {player.seatIndex + 1} · {player.chips} chips
+              <div className="text-xs text-gray-500 dark:text-emerald-400 flex items-center gap-2 mt-0.5">
+                <span>Seat {player.seatIndex + 1}</span>
+                <span>·</span>
+                <LivesMini lives={player.lives} max={room.startingLives} />
+                <span>{player.lives} pieces</span>
               </div>
             </div>
+
+            {/* Ready indicator */}
             <div
-              className="w-2 h-2 rounded-full"
+              className="w-2 h-2 rounded-full flex-shrink-0"
               style={{ background: player.isReady || player.isBot ? "#22c55e" : "#d1d5db" }}
             />
           </motion.div>

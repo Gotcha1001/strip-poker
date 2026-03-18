@@ -38,7 +38,7 @@ const NAV_ITEMS = [
   { label: "Play Locally", path: "/local", icon: MonitorSpeaker, badge: "🏠" },
   { label: "Game History", path: "/history", icon: History },
   { label: "Leaderboard", path: "/leaderboard", icon: Trophy, badge: "🔥" },
-  { label: "Tips & Rules", path: "/tips", icon: BookOpen, badge: "✨" },
+  { label: "How to Play", path: "/rules",        icon: BookOpen,       badge: "📖" },
   { label: "Settings", path: "/settings", icon: Settings },
 ];
 

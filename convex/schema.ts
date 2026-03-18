@@ -1,5 +1,23 @@
+
+
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
+
+// ────────────────────────────────────────────────────────────────────────────
+// 🎰 CLASSIC 5-CARD DRAW STRIP POKER
+//
+// Rules:
+//   • Each player gets 5 hole cards
+//   • Betting round 1 (check / bet / call / fold)
+//   • Draw phase — discard & redraw up to 3 cards
+//   • Betting round 2 (check / bet / call / fold)
+//   • Showdown — worst hand loses 1 clothing piece
+//   • 5 pieces each: 👟👟🧦🧦👖👔👙  (shoes×2, socks×2, pants, shirt, underwear)
+//   • Run out → eliminated. Last clothed player wins.
+//
+// Phases:
+//   deal → betting1 → draw → betting2 → showdown
+// ────────────────────────────────────────────────────────────────────────────
 
 export default defineSchema({
   users: defineTable({
@@ -22,8 +40,7 @@ export default defineSchema({
     ),
     maxPlayers: v.number(),
     playerIds: v.array(v.string()),
-    bigBlind: v.number(),
-    startingChips: v.number(),
+    startingLives: v.number(), // default 5
     createdAt: v.number(),
   }).index("by_status", ["status"]),
 
@@ -35,7 +52,7 @@ export default defineSchema({
     isBot: v.boolean(),
     isReady: v.boolean(),
     isConnected: v.boolean(),
-    chips: v.number(),
+    lives: v.number(),      // clothing pieces remaining
     seatIndex: v.number(),
   })
     .index("by_room", ["roomId"])
@@ -43,50 +60,50 @@ export default defineSchema({
 
   games: defineTable({
     roomId: v.id("rooms"),
-    // Deck stored as serialized card strings "AS","KH","2D" etc.
+
+    // ── Cards ──────────────────────────────────────────────────────────────
     deck: v.array(v.string()),
-    // Hole cards per player: { [playerId]: ["AS","KH"] }
-    holeCards: v.string(), // JSON stringified
-    communityCards: v.array(v.string()),
-    pot: v.number(),
-    sidePots: v.string(), // JSON: [{amount, eligiblePlayerIds}]
-    currentBet: v.number(),
-    minRaise: v.number(),
-    bigBlind: v.number(),
+    // JSON: { [playerId]: ["AS","KH","2D","7C","QS"] }
+    holeCards: v.string(),
+
+    // ── Game flow ──────────────────────────────────────────────────────────
     phase: v.union(
-      v.literal("preflop"),
-      v.literal("flop"),
-      v.literal("turn"),
-      v.literal("river"),
-      v.literal("showdown")
+      v.literal("betting1"),   // first betting round after deal
+      v.literal("draw"),       // players discard & draw
+      v.literal("betting2"),   // second betting round after draw
+      v.literal("showdown")    // reveal & penalise loser
     ),
-    dealerIndex: v.number(),
+
+    // Index into playerOrder of who acts next
     currentPlayerIndex: v.number(),
+    dealerIndex: v.number(),
     playerOrder: v.array(v.string()),
-    // Per-round bets
-    roundBets: v.string(), // JSON: { [playerId]: number }
-    // Player states: fold/active/allIn
-    playerStates: v.string(), // JSON: { [playerId]: "active"|"folded"|"allIn" }
+
+    // JSON: { [playerId]: "active" | "folded" }
+    playerStates: v.string(),
+
+    // JSON: { [playerId]: boolean } — has this player acted this betting round?
+    actedThisRound: v.string(),
+
+    // JSON: { [playerId]: boolean } — has this player completed their draw?
+    drawnThisRound: v.string(),
+
+    // ── Results ────────────────────────────────────────────────────────────
     lastAction: v.optional(v.string()),
-    lastRaiserId: v.optional(v.string()),
     winnerId: v.optional(v.string()),
     winnerIds: v.optional(v.array(v.string())),
+    loserId: v.optional(v.string()),
+    loserIds: v.optional(v.array(v.string())),
     winningHand: v.optional(v.string()),
-    status: v.union(v.literal("active"), v.literal("finished")),
+    losingHand: v.optional(v.string()),
+
+    status: v.union(
+      v.literal("active"),
+      v.literal("finished")
+    ),
     handNumber: v.number(),
     createdAt: v.number(),
   }).index("by_room", ["roomId"]),
-
-  // Per-player chip ledger across hands
-  chipLedger: defineTable({
-    roomId: v.id("rooms"),
-    userId: v.string(),
-    chips: v.number(),
-    handsPlayed: v.number(),
-    handsWon: v.number(),
-  })
-    .index("by_room", ["roomId"])
-    .index("by_user_room", ["userId", "roomId"]),
 
   messages: defineTable({
     roomId: v.id("rooms"),

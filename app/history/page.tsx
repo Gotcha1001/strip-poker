@@ -8,18 +8,22 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Trophy, Swords, Clock, Hash } from "lucide-react";
 import { Id } from "@/convex/_generated/dataModel";
 
+// ─── Types matching new schema (5-Card Draw — no communityCards) ──────────────
 interface Game {
   _id: Id<"games">;
   roomId: Id<"rooms">;
   playerOrder: string[];
   winnerId?: string;
   winnerIds?: string[];
+  loserId?: string;
+  loserIds?: string[];
   winningHand?: string;
+  losingHand?: string;
   status: "active" | "finished";
   lastAction?: string;
   createdAt: number;
-  communityCards: string[];
   handNumber: number;
+  phase: "betting1" | "draw" | "betting2" | "showdown";
 }
 
 function timeAgo(ts: number): string {
@@ -30,34 +34,29 @@ function timeAgo(ts: number): string {
   return `${Math.floor(diff / 86400)}d ago`;
 }
 
-const HAND_RANK_ORDER = [
-  "Royal Flush", "Straight Flush", "Four of a Kind", "Full House",
-  "Flush", "Straight", "Three of a Kind", "Two Pair", "Pair", "High Card",
-  "Last player standing",
-];
-
 export default function HistoryPage() {
   const { user } = useUser();
-  const router = useRouter();
+  const router   = useRouter();
+
   const games = useQuery(
     api.game.getFinishedGamesForUser,
     user ? { userId: user.id } : "skip"
-  );
+  ) as Game[] | undefined;
 
   if (!user) { router.push("/"); return null; }
 
-  const wins = games?.filter((g) => (g.winnerIds ?? [g.winnerId]).includes(user.id)).length ?? 0;
-  const losses = (games?.length ?? 0) - wins;
+  const wins    = games?.filter(g => (g.winnerIds ?? (g.winnerId ? [g.winnerId] : [])).includes(user.id)).length ?? 0;
+  const losses  = (games?.length ?? 0) - wins;
   const winRate = games && games.length > 0 ? Math.round((wins / games.length) * 100) : 0;
 
   return (
     <div className="max-w-3xl mx-auto">
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-black dark:text-white">Game History</h1>
-        <p className="text-gray-500 dark:text-emerald-300">Your past poker hands</p>
+        <p className="text-gray-500 dark:text-emerald-300">Your past strip poker hands</p>
       </div>
 
-      {/* Summary */}
+      {/* Summary cards */}
       <motion.div
         className="grid grid-cols-3 gap-4 mb-8"
         initial="hidden"
@@ -65,9 +64,9 @@ export default function HistoryPage() {
         variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.1 } } }}
       >
         {[
-          { label: "Total Hands", value: games?.length ?? "---", icon: Hash, color: "text-emerald-600 dark:text-emerald-400" },
-          { label: "Wins", value: wins || "---", icon: Trophy, color: "text-yellow-500 dark:text-yellow-400" },
-          { label: "Win Rate", value: games?.length ? `${winRate}%` : "---", icon: Swords, color: "text-teal-600 dark:text-teal-400" },
+          { label: "Total Hands", value: games?.length ?? "---", icon: Hash,   color: "text-emerald-600 dark:text-emerald-400" },
+          { label: "Wins",        value: wins    || "---",        icon: Trophy, color: "text-yellow-500 dark:text-yellow-400" },
+          { label: "Win Rate",    value: games?.length ? `${winRate}%` : "---", icon: Swords, color: "text-teal-600 dark:text-teal-400" },
         ].map(({ label, value, icon: Icon, color }) => (
           <motion.div
             key={label}
@@ -97,16 +96,20 @@ export default function HistoryPage() {
             animate={{ opacity: 1 }}
             className="p-12 text-center rounded-2xl border border-gray-200 dark:border-emerald-800 bg-white dark:bg-emerald-950/40"
           >
-            <div className="text-5xl mb-4">♠</div>
+            <div className="text-5xl mb-4">🎰</div>
             <p className="font-semibold text-black dark:text-white mb-1">No hands yet</p>
-            <p className="text-gray-500 dark:text-emerald-300">Finish a game to see it here!</p>
+            <p className="text-gray-500 dark:text-emerald-300">Finish a game to see your history here!</p>
           </motion.div>
         )}
 
         <AnimatePresence>
           {games?.map((game, i) => {
-            const won = (game.winnerIds ?? [game.winnerId]).includes(user.id);
-            const opponents = game.playerOrder.filter((id) => id !== user.id);
+            const winnerIds  = game.winnerIds ?? (game.winnerId ? [game.winnerId] : []);
+            const loserIds   = game.loserIds  ?? (game.loserId  ? [game.loserId]  : []);
+            const won        = winnerIds.includes(user.id);
+            const lost       = loserIds.includes(user.id);   // lost a piece this hand
+            const foldWin    = won && loserIds.length === 0;  // everyone folded, no strip
+            const opponents  = game.playerOrder.filter(id => id !== user.id);
 
             return (
               <motion.div
@@ -117,25 +120,42 @@ export default function HistoryPage() {
                 transition={{ delay: i * 0.04 }}
                 className="p-4 flex items-center gap-4 rounded-2xl border border-gray-200 dark:border-emerald-800 bg-white dark:bg-emerald-950/40 shadow-sm"
               >
-                {/* Win/loss badge */}
+                {/* Result badge */}
                 <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-xl font-bold flex-shrink-0 ${
-                  won ? "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600" : "bg-gray-100 dark:bg-emerald-900/30 text-gray-400"
+                  foldWin ? "bg-emerald-100 dark:bg-emerald-900/30" :
+                  won     ? "bg-yellow-100 dark:bg-yellow-900/30"   :
+                  lost    ? "bg-red-100    dark:bg-red-900/20"      :
+                            "bg-gray-100   dark:bg-emerald-900/30"
                 }`}>
-                  {won ? "🏆" : "😔"}
+                  {foldWin ? "😏" : won ? "🏆" : lost ? "😳" : "😐"}
                 </div>
 
                 {/* Game info */}
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className={`text-sm font-semibold ${won ? "text-yellow-600 dark:text-yellow-400" : "text-gray-500 dark:text-emerald-300"}`}>
-                      {won ? "Victory" : "Defeat"}
+                  <div className="flex items-center gap-2 mb-1 flex-wrap">
+                    <span className={`text-sm font-semibold ${
+                      won  ? "text-yellow-600 dark:text-yellow-400" :
+                      lost ? "text-red-500    dark:text-red-400"    :
+                             "text-gray-500   dark:text-emerald-300"
+                    }`}>
+                      {foldWin ? "Bluff win"  :
+                       won     ? "Victory"    :
+                       lost    ? "Lost a piece" :
+                                 "Neutral"}
                     </span>
                     <span className="text-xs text-gray-400 dark:text-emerald-500">
                       vs {opponents.length} opponent{opponents.length !== 1 ? "s" : ""}
                     </span>
+                    {/* Winning hand badge */}
                     {game.winningHand && (
                       <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400">
-                        {game.winningHand}
+                        🏆 {game.winningHand}
+                      </span>
+                    )}
+                    {/* Losing hand badge */}
+                    {game.losingHand && loserIds.length > 0 && (
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 dark:bg-red-900/30 text-red-500 dark:text-red-400">
+                        💀 {game.losingHand}
                       </span>
                     )}
                   </div>
@@ -151,10 +171,10 @@ export default function HistoryPage() {
                     {timeAgo(game.createdAt)}
                   </div>
                   <div className="text-xs text-gray-400 dark:text-emerald-500">
-                    {game.communityCards.length} cards dealt
-                  </div>
-                  <div className="text-xs text-gray-400 dark:text-emerald-500">
                     Hand #{game.handNumber}
+                  </div>
+                  <div className="text-xs text-gray-400 dark:text-emerald-500 capitalize">
+                    {game.phase}
                   </div>
                 </div>
               </motion.div>
